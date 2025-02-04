@@ -25,6 +25,7 @@ extern const AP_HAL::HAL& hal;
 
 // singleton instance
 AP_Motors *AP_Motors::_singleton;
+float des_forward = 0.0f; // 定义全局变量：期望前向力
 
 // Constructor
 AP_Motors::AP_Motors(uint16_t speed_hz) :

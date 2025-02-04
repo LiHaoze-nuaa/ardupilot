@@ -486,6 +486,7 @@ void Mode::get_pilot_desired_lean_angles(float &roll_out_cd, float &pitch_out_cd
     // Convert to centi-degrees
     roll_out_cd = roll_out_deg * 100.0;
     pitch_out_cd = pitch_out_deg * 100.0;
+    pitch_out_cd = pitch_out_deg * 0.1; //将期望俯仰角受俯仰通道的影响降低到几乎为零的状态 
 }
 
 // transform pilot's roll or pitch input into a desired velocity

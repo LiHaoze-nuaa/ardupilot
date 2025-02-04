@@ -63,6 +63,7 @@ bool ModePosHold::init(bool ignore_checks)
     return true;
 }
 
+extern float des_forward; // 声明全局变量：期望前向力
 // poshold_run - runs the PosHold controller
 // should be called at 100hz or more
 void ModePosHold::run()
@@ -482,9 +483,10 @@ void ModePosHold::run()
     float angle_max = copter.aparm.angle_max;
     roll = constrain_float(roll, -angle_max, angle_max);
     pitch = constrain_float(pitch, -angle_max, angle_max);
-
+    des_forward = pitch; // 将发送给姿态控制器的期望俯仰角设为0，并对期望前向力的赋值
+    
     // call attitude controller
-    attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(roll, pitch, target_yaw_rate);
+    attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(roll, 0.0f, target_yaw_rate);
 
     // run the vertical position controller and set output throttle
     pos_control->update_z_controller();

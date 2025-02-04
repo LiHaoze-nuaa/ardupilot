@@ -16,8 +16,12 @@
 #include <AP_HAL/AP_HAL.h>
 #include "AP_MotorsMatrix.h"
 #include <AP_Vehicle/AP_Vehicle_Type.h>
+#include <SRV_Channel/SRV_Channel.h>
+#include <RC_Channel/RC_Channel.h>
 
 extern const AP_HAL::HAL& hal;
+
+#define SERVO_OUTPUT_RANGE  4500
 
 // init
 void AP_MotorsMatrix::init(motor_frame_class frame_class, motor_frame_type frame_type)
@@ -33,6 +37,9 @@ void AP_MotorsMatrix::init(motor_frame_class frame_class, motor_frame_type frame
 
     // setup the motors
     setup_motors(frame_class, frame_type);
+    
+    SRV_Channels::set_angle(SRV_Channel::k_tilt_f, SERVO_OUTPUT_RANGE);
+    SRV_Channels::set_angle(SRV_Channel::k_tilt_b, SERVO_OUTPUT_RANGE);
 
     // enable fast channels or instant pwm
     set_update_rate(_speed_hz);
@@ -174,6 +181,11 @@ void AP_MotorsMatrix::output_to_motors()
             break;
     }
 
+    // SRV_Channels::set_output_scaled(SRV_Channel::k_motor_tilt, _tilt_motor*SERVO_OUTPUT_RANGE);
+    // SRV_Channels::set_output_scaled(SRV_Channel::k_motor_tilt, _tilt_motor*SERVO_OUTPUT_RANGE);
+    SRV_Channels::set_output_pwm(SRV_Channel::k_tilt_f, _tilt_f);
+    SRV_Channels::set_output_pwm(SRV_Channel::k_tilt_b, _tilt_b);
+    
     // convert output to PWM and send to each motor
     for (i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
         if (motor_enabled[i]) {
@@ -214,6 +226,24 @@ void AP_MotorsMatrix::output_armed_stabilizing()
 {
     // apply voltage and air pressure compensation
     const float compensation_gain = thr_lin.get_compensation_gain(); // compensation for battery voltage and altitude
+    float   rotate_angle;
+    float   safe_rcin;
+    float   mode_switch;
+    float   forward;
+
+    uint16_t rcin[10] = {};
+    rc().get_radio_in (rcin, 10);
+    rotate_angle = rcin[8];      // 将遥控器第9通道信号赋值给变姿角
+    forward = hal.rcin->read(CH_2);         // 将遥控器第2通道信号赋值给前向平移指令
+    safe_rcin = hal.rcin->read(CH_5);
+    mode_switch = hal.rcin->read(CH_7);
+    safe_rcin = ( safe_rcin - 1500) * 0.2f;
+    if ( mode_switch > 1800 ) { forward = des_forward * 0.5f; }   // 非自稳模式没有前后矢量控制
+    else { forward = ( forward - 1515) * 0.002f; }  // 仅自稳模式采用前后矢量控制
+    // PosHold模式的控制输出更新频率较低，数据变化较大，不适合用于位置控制
+
+    _tilt_f = - forward * 200.0f - (rotate_angle - 1500) + 1500;
+    _tilt_b =   forward * 200.0f + (rotate_angle - 1500) + 1500;
 
     // pitch thrust input value, +/- 1.0
     const float roll_thrust = (_roll_in + _roll_in_ff) * compensation_gain;
@@ -393,7 +423,11 @@ void AP_MotorsMatrix::output_armed_stabilizing()
     const float throttle_thrust_best_plus_adj = throttle_thrust_best_rpy + thr_adj;
     for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
         if (motor_enabled[i]) {
-            _thrust_rpyt_out[i] = (throttle_thrust_best_plus_adj * _throttle_factor[i]) + (rpy_scale * _thrust_rpyt_out[i]);
+            if (safe_rcin < 0)         // 拨杆位于上位，停桨
+            {   _thrust_rpyt_out[i] = 0.0f;
+            } else                     // 拨杆位于下位，输出油门
+            {   _thrust_rpyt_out[i] = (throttle_thrust_best_plus_adj * _throttle_factor[i]) + (rpy_scale * _thrust_rpyt_out[i]);
+            }
         }
     }
 

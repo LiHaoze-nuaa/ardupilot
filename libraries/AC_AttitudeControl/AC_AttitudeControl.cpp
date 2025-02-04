@@ -609,6 +609,7 @@ void AC_AttitudeControl::input_thrust_vector_rate_heading(const Vector3f& thrust
     attitude_controller_run_quat();
 }
 
+extern float des_forward; // 声明全局变量：期望前向力
 // Command a thrust vector, heading and heading rate
 void AC_AttitudeControl::input_thrust_vector_heading(const Vector3f& thrust_vector, float heading_angle_cd, float heading_rate_cds)
 {
@@ -624,6 +625,13 @@ void AC_AttitudeControl::input_thrust_vector_heading(const Vector3f& thrust_vect
 
     // convert thrust vector and heading to a quaternion attitude
     const Quaternion desired_attitude_quat = attitude_from_thrust_vector(thrust_vector, heading_angle);
+    
+    // convert quaternion to euler angles
+    float roll_rad, pitch_rad, yaw_rad;
+    desired_attitude_quat.to_euler(roll_rad, pitch_rad, yaw_rad);
+    des_forward = pitch_rad; // 将发送给姿态控制器的期望俯仰角设为0，并对期望前向力的赋值
+    Quaternion desired_attitude_quat_without_pitch;
+    desired_attitude_quat_without_pitch.from_euler(roll_rad, 0.0f, yaw_rad);
 
     if (_rate_bf_ff_enabled) {
         // calculate the angle error in x and y.
@@ -631,7 +639,7 @@ void AC_AttitudeControl::input_thrust_vector_heading(const Vector3f& thrust_vect
         float thrust_vector_diff_angle;
         Quaternion thrust_vec_correction_quat;
         float returned_thrust_vector_angle;
-        thrust_vector_rotation_angles(desired_attitude_quat, _attitude_target, thrust_vec_correction_quat, attitude_error, returned_thrust_vector_angle, thrust_vector_diff_angle);
+        thrust_vector_rotation_angles(desired_attitude_quat_without_pitch, _attitude_target, thrust_vec_correction_quat, attitude_error, returned_thrust_vector_angle, thrust_vector_diff_angle);
 
         // When yaw acceleration limiting is enabled, the yaw input shaper constrains angular acceleration about the yaw axis, slewing
         // the output rate towards the input rate.
@@ -643,7 +651,7 @@ void AC_AttitudeControl::input_thrust_vector_heading(const Vector3f& thrust_vect
         ang_vel_limit(_ang_vel_target, radians(_ang_vel_roll_max), radians(_ang_vel_pitch_max), slew_yaw_max_rads);
     } else {
         // set persisted quaternion target attitude
-        _attitude_target = desired_attitude_quat;
+        _attitude_target = desired_attitude_quat_without_pitch;
 
         // Set rate feedforward requests to zero
         _euler_rate_target.zero();

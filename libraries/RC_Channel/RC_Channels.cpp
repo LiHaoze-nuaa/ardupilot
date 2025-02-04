@@ -33,6 +33,10 @@ extern const AP_HAL::HAL& hal;
 
 #include "RC_Channel.h"
 
+uint32_t now_ms;
+uint32_t last_ms;
+uint32_t dt_ms;
+uint16_t chan8 = 1500; // 传递变量
 /*
   channels group object constructor
  */
@@ -62,10 +66,31 @@ uint8_t RC_Channels::get_radio_in(uint16_t *chans, const uint8_t num_channels)
     memset(chans, 0, num_channels*sizeof(*chans));
 
     const uint8_t read_channels = MIN(num_channels, NUM_RC_CHANNELS);
-    for (uint8_t i = 0; i < read_channels; i++) {
-        chans[i] = channel(i)->get_radio_in();
+    now_ms = AP_HAL::millis();
+    dt_ms = dt_ms + now_ms - last_ms;
+
+    for (uint8_t i = 0; i < read_channels; i++) 
+    {
+        if (i==8) // chans[6]其实是第7通道，chans[8]其实是第9通道
+        {   
+            if( chans[6] < 2500 ) { // 如果处于自稳模式
+                if( chans[7] <= 1400 ) // 拨杆朝下则递减
+                {   if (dt_ms>10)  { chan8 = chan8 - 1; chans[8] = chan8; dt_ms = 0; }
+                    else  { chan8 = chan8; chans[8] = chan8; } }
+                if( chans[7] > 1400 && chans[5] < 1600) // 拨杆中位则保持
+                {   chan8 = chan8;  chans[8] = chan8; }
+                if( chans[7] >= 1600 ) // 拨杆朝上则递增
+                {   if (dt_ms>10)  { chan8 = chan8 + 1; chans[8] = chan8; dt_ms = 0; }
+                    else  { chan8 = chan8;  chans[8] = chan8; } }
+                if( chan8 >= 2000 ) { chan8 = 2000;  chans[8] = chan8; } // 最大限幅
+                if( chan8 <= 1000 ) { chan8 = 1000;  chans[8] = chan8; } // 最小限幅
+            } else { chans[8] = channel(8)->get_radio_in(); } // 处于非自稳模式
+        }
+        else
+        {   chans[i] = channel(i)->get_radio_in();   }  
     }
 
+    last_ms = AP_HAL::millis();
     return read_channels;
 }
 

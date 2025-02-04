@@ -144,7 +144,6 @@ void SRV_Channel::aux_servo_function_setup(void)
         break;
     case k_heli_rsc:
     case k_heli_tail_rsc:
-    case k_motor_tilt:
     case k_boost_throttle:
     case k_thrust_out:
         set_range(1000);
@@ -161,11 +160,14 @@ void SRV_Channel::aux_servo_function_setup(void)
     case k_steering:
     case k_flaperon_left:
     case k_flaperon_right:
+    case k_motor_tilt:
     case k_tiltMotorLeft:
     case k_tiltMotorRight:
     case k_tiltMotorRear:
     case k_tiltMotorRearLeft:
     case k_tiltMotorRearRight:
+    case k_tilt_f:
+    case k_tilt_b:
     case k_elevon_left:
     case k_elevon_right:
     case k_vtail_left:

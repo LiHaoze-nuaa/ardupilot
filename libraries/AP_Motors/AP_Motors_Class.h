@@ -51,6 +51,7 @@
 
 // motor update rate
 #define AP_MOTORS_SPEED_DEFAULT     490 // default output rate to the motors
+extern float des_forward; // 声明全局变量：期望前向力
 
 /// @class      AP_Motors
 class AP_Motors {

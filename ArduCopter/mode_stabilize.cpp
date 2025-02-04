@@ -14,6 +14,7 @@ void ModeStabilize::run()
     // convert pilot input to lean angles
     float target_roll, target_pitch;
     get_pilot_desired_lean_angles(target_roll, target_pitch, copter.aparm.angle_max, copter.aparm.angle_max);
+    target_pitch = 0.0f; // 将期望俯仰角受俯仰通道的影响降低到几乎为零的状态
 
     // get pilot's desired yaw rate
     float target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->norm_input_dz());
