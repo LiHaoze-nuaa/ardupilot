@@ -469,6 +469,15 @@ void AC_AttitudeControl_Multi::rate_controller_run()
     control_monitor_update();
 }
 
+void AC_AttitudeControl_Multi::falcon_rate_controller_run() // 经测试，角速度控制从这里运行
+{
+    Vector3f gyro_latest = _ahrs.get_gyro(); // 内环控制、日志和地面站统一使用get_gyro，经测试，已成功调用角速度数据
+    _motors.set_roll(get_rate_roll_pid().update_all(_ang_vel_body.x, gyro_latest.x,  _dt, _motors.limit.roll, 1.0f));
+    _motors.set_pitch(get_rate_pitch_pid().update_all(_ang_vel_body.y, gyro_latest.y,  _dt, _motors.limit.pitch, 1.0f));
+    _motors.set_yaw(get_rate_yaw_pid().update_all(_ang_vel_body.z, gyro_latest.z,  _dt, _motors.limit.yaw, 1.0f));
+    control_monitor_update(); // 与日志记录有关，暂不删除
+}
+
 // sanity check parameters.  should be called once before takeoff
 void AC_AttitudeControl_Multi::parameter_sanity_check()
 {

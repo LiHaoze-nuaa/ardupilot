@@ -2008,7 +2008,12 @@ Compass::calculate_heading(const Matrix3f &dcm_matrix, uint8_t i) const
     const float cos_pitch_sq = 1.0f-(dcm_matrix.c.x*dcm_matrix.c.x);
 
     // Tilt compensated magnetic field Y component:
-    const Vector3f &field = get_field(i);
+    // const Vector3f &field = get_field(i);
+    Vector3f myfield = get_field(i);
+    Matrix3f board_rotation;
+    board_rotation.from_euler(0.0f, -pitch_real, 0.0f);
+    myfield = board_rotation * myfield;
+    const Vector3f &field = myfield;
 
     const float headY = field.y * dcm_matrix.c.z - field.z * dcm_matrix.c.y;
 

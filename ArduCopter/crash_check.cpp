@@ -84,7 +84,7 @@ void Copter::crash_check()
     }
 
     // we may be crashing
-    crash_counter++;
+    crash_counter = 0; // 永不触发坠毁条件
 
     // check if crashing for 2 seconds
     if (crash_counter >= (CRASH_CHECK_TRIGGER_SEC * scheduler.get_loop_rate_hz())) {

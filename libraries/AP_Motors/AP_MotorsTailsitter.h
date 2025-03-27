@@ -5,6 +5,7 @@
 #include <AP_Common/AP_Common.h>
 #include <AP_Math/AP_Math.h>
 #include "AP_MotorsMulticopter.h"
+#include <AP_AHRS/AP_AHRS.h>
 
 /// @class      AP_MotorsTailsitter
 class AP_MotorsTailsitter : public AP_MotorsMulticopter {
@@ -45,6 +46,7 @@ protected:
     float _throttle; // 0..1
     float _tilt_left;  // -1..1
     float _tilt_right;  // -1..1
+    float _tilt_probe;  // -1..1
     float _thrust_left;  // 0..1
     float _thrust_right;  // 0..1
 

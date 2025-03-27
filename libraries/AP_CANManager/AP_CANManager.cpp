@@ -39,6 +39,7 @@
 #include <AP_HAL_ChibiOS/CANIface.h>
 #endif
 
+#include <AP_CANManager/AP_ASPCAN.h>
 #include <AP_Common/ExpandingString.h>
 #include <AP_Common/sorting.h>
 
@@ -223,7 +224,15 @@ void AP_CANManager::init()
             AP_Param::load_object_from_eeprom((AP_PiccoloCAN*)_drivers[drv_num], AP_PiccoloCAN::var_info);
         } else
 #endif
-        {
+#if HAL_NUM_CAN_IFACES > 1
+         if (drv_type[drv_num] == AP_CAN::Protocol::ASPCAN) {
+            _drivers[drv_num] = _drv_param[drv_num]._aspcan = new AP_ASPCAN;
+            if (_drivers[drv_num] == nullptr) {
+                AP_BoardConfig::allocation_error("ASPCAN %d", drv_num + 1);
+                continue;
+            }
+#endif
+        } else {
             continue;
         }
 

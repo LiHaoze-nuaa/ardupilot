@@ -166,6 +166,7 @@ void SRV_Channel::aux_servo_function_setup(void)
     case k_tiltMotorRear:
     case k_tiltMotorRearLeft:
     case k_tiltMotorRearRight:
+    case k_tilt_probe:
     case k_elevon_left:
     case k_elevon_right:
     case k_vtail_left:

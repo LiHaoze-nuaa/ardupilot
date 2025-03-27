@@ -7,7 +7,7 @@
 
 #include <AC_AttitudeControl/AC_AttitudeControl.h>
 #include <AC_AttitudeControl/AC_PosControl.h>
-
+#include <AP_CANManager/AP_ASPCAN.h>
 
 // Write an AHRS2 packet
 void AP_AHRS::Write_AHRS2() const
@@ -147,21 +147,27 @@ void AP_AHRS_View::Write_AttitudeView(const Vector3f &targets) const
 void AP_AHRS_View::Write_Rate(const AP_Motors &motors, const AC_AttitudeControl &attitude_control,
                                 const AC_PosControl &pos_control) const
 {
-    const Vector3f &rate_targets = attitude_control.rate_bf_targets();
+    AP_ASPCAN *ASPCAN = AP_ASPCAN::get_singleton();
     const Vector3f &accel_target = pos_control.get_accel_target_cmss();
     const auto timeus = AP_HAL::micros64();
     const struct log_Rate pkt_rate{
         LOG_PACKET_HEADER_INIT(LOG_RATE_MSG),
         time_us         : timeus,
-        control_roll    : degrees(rate_targets.x),
+        // control_roll    : degrees(rate_targets.x),
+        // roll_out        : motors.get_roll()+motors.get_roll_ff(),
+        // control_pitch   : degrees(rate_targets.y),
+        // pitch_out       : motors.get_pitch()+motors.get_pitch_ff(),
+        // control_yaw     : degrees(rate_targets.z),
+        // yaw_out         : motors.get_yaw()+motors.get_yaw_ff(),
+        control_roll    : ASPCAN->getairspeedorig(0),
         roll            : degrees(get_gyro().x),
-        roll_out        : motors.get_roll()+motors.get_roll_ff(),
-        control_pitch   : degrees(rate_targets.y),
+        roll_out        : ASPCAN->getairspeed(0),
+        control_pitch   : ASPCAN->getairspeedorig(1),
         pitch           : degrees(get_gyro().y),
-        pitch_out       : motors.get_pitch()+motors.get_pitch_ff(),
-        control_yaw     : degrees(rate_targets.z),
+        pitch_out       : ASPCAN->getairspeed(1),
+        control_yaw     : ASPCAN->getairspeedorig(3),
         yaw             : degrees(get_gyro().z),
-        yaw_out         : motors.get_yaw()+motors.get_yaw_ff(),
+        yaw_out         : ASPCAN->getairspeed(3),
         control_accel   : (float)accel_target.z,
         accel           : (float)(-(get_accel_ef().z + GRAVITY_MSS) * 100.0f),
         accel_out       : motors.get_throttle(),

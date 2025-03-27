@@ -34,6 +34,8 @@
 #include "AP_AHRS_SIM.h"
 #include "AP_AHRS_External.h"
 
+extern float pitch_real; // 声明全局真实俯仰角
+
 // forward declare view class
 class AP_AHRS_View;
 

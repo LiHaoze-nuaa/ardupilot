@@ -26,6 +26,9 @@ extern const AP_HAL::HAL& hal;
 // singleton instance
 AP_Motors *AP_Motors::_singleton;
 
+float falcon_extra_elevator = 0.0f; // 定义全局变量
+float tilt_probe_cmd = 0.0f; // 定义全局变量
+
 // Constructor
 AP_Motors::AP_Motors(uint16_t speed_hz) :
     _speed_hz(speed_hz),

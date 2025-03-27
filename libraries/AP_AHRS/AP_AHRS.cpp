@@ -50,6 +50,8 @@
 #define HAL_AHRS_EKF_TYPE_DEFAULT 3
 #endif
 
+float pitch_real; // 定义全局真实俯仰角
+
 // table of user settable parameters
 const AP_Param::GroupInfo AP_AHRS::var_info[] = {
     // index 0 and 1 are for old parameters that are no longer not used
@@ -646,12 +648,17 @@ void AP_AHRS::update_EKF3(void)
     if (_ekf3_started) {
         EKF3.UpdateFilter();
         if (_active_EKF_type() == EKFType::THREE) {
-            Vector3f eulers;
-            EKF3.getRotationBodyToNED(state.dcm_matrix);
-            EKF3.getEulerAngles(eulers);
-            roll  = eulers.x;
-            pitch = eulers.y;
-            yaw   = eulers.z;
+            Quaternion qekf; // 定义全局原始四元数
+            EKF3.getRotationBodyToNED(state.dcm_matrix); // 原始旋转矩阵
+            EKF3.getQuaternion(qekf); // 原始四元数
+
+            // EKF四元数计算俯仰角，ZXY顺序，范围扩展至±180度
+            pitch_real = atan2F(2.0f*(qekf.q1*qekf.q3 - qekf.q2*qekf.q4), 1.0f - 2.0f*(qekf.q2*qekf.q2 + qekf.q3*qekf.q3));
+            Matrix3f board_rotation, rotate_pitch;
+            board_rotation.from_euler(0.0f, -pitch_real, 0.0f);
+            rotate_pitch = state.dcm_matrix * board_rotation; // 将矩阵旋转至零俯仰状态
+            rotate_pitch.to_euler(&roll, &pitch, &yaw);    
+            pitch = pitch_real;
 
             update_cd_values();
             update_trig();

@@ -66,6 +66,7 @@
 #include <AP_KDECAN/AP_KDECAN.h>
 #include <AP_LandingGear/AP_LandingGear.h>
 #include <AP_Landing/AP_Landing_config.h>
+#include <AP_CANManager/AP_ASPCAN.h>
 
 #include "MissionItemProtocol_Waypoints.h"
 #include "MissionItemProtocol_Rally.h"
@@ -5484,6 +5485,7 @@ void GCS_MAVLINK::send_attitude() const
 #if AP_AHRS_ENABLED
     const AP_AHRS &ahrs = AP::ahrs();
     const Vector3f omega = ahrs.get_gyro();
+    // AP_ASPCAN *ASPCAN = AP_ASPCAN::get_singleton();
     mavlink_msg_attitude_send(
         chan,
         AP_HAL::millis(),
@@ -5493,6 +5495,9 @@ void GCS_MAVLINK::send_attitude() const
         omega.x,
         omega.y,
         omega.z);
+        // ASPCAN->getairspeed(0),
+        // ASPCAN->getairspeed(1),
+        // ASPCAN->getairspeed(3));
 #endif
 }
 

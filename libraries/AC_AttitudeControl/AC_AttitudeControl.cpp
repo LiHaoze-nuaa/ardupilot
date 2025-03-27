@@ -2,6 +2,8 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 #include <AP_Scheduler/AP_Scheduler.h>
+#include <AP_CANManager/AP_ASPCAN.h>
+#include <AP_GPS/AP_GPS.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -314,6 +316,60 @@ void AC_AttitudeControl::input_euler_angle_roll_pitch_euler_rate_yaw(float euler
 
     // Call quaternion attitude controller
     attitude_controller_run_quat();
+}
+
+// Command an euler roll and pitch angle and an euler yaw rate with angular velocity feedforward and smoothing
+void AC_AttitudeControl::falcon_attitude_controller_run()
+{
+    uint16_t rcin[8] = {};
+    rc().get_radio_in (rcin, 8); // 获取遥控器数据
+    const float roll_des  = radians( (rcin[0]-1500)*0.2f ); // 期望滚转角，±90deg
+    const float pitch_des = radians( (rcin[1]-1500)*0.2f ); // 期望俯仰角，±90deg
+    const float yaw_des   = radians( (rcin[3]-1500)*0.2f ); // 期望侧滑角，±20deg
+    const float pitch_ntrl= radians( (rcin[6]-1000)*0.1f ); // 中立俯仰角，10-90deg
+
+    // AP_ASPCAN *ASPCAN = AP_ASPCAN::get_singleton(); // 获取空速数据
+    // float ssa_falcon  = radians(ASPCAN->getairspeed(0));
+    const AP_AHRS &ahrs_falcon = AP::ahrs(); // 获取姿态数据  
+    float roll_falcon = ahrs_falcon.get_roll();
+    float pitch_falcon= ahrs_falcon.get_pitch();
+    float yaw_falcon  = ahrs_falcon.get_yaw();
+ 
+    float rll_err = roll_des - roll_falcon; 
+    float pth_ntr = pitch_falcon - pitch_ntrl; // 减去中立角度的俯仰角
+    if (pth_ntr < -M_PI) { pth_ntr += M_2PI; } // 限制取值范围到±PI
+    float pth_err = pitch_des - pth_ntr;
+    float grdspd = ahrs_falcon.groundspeed(); // 地速
+    float heading = ahrs_falcon.groundspeed_vector().angle();
+    float gsgain = (constrain_float(grdspd, 4.0f, 8.0f) - 4.0f )* 0.25f;
+    // gsgain = 1.0f; // 测试用
+    
+    float yaw_err;
+    if ( rcin[6] < 1890 && rcin[6] > 800) { // 如果低速飞行，则手动控制航向；如果高速飞行，则应用航迹角控制
+        yaw_err = yaw_des + gsgain * (wrap_PI(heading-yaw_falcon)); }
+    else { yaw_err = yaw_des; } // 安全模式
+    // float yaw_rate_coord = (GRAVITY_MSS / MAX(gspd, 8.0f)) * sinf(roll_falcon); // 协调转弯
+    // yaw_rate_des = 1.5f * yaw_des + 0.5f * gsgain * yaw_rate_coord;
+
+    float rll_rate_des = sqrt_controller(rll_err, _p_angle_roll.kP(),  50.0f, _dt); // 计算期望角速度
+    float pth_rate_des = sqrt_controller(pth_err, _p_angle_pitch.kP(), 50.0f, _dt);
+    float yaw_rate_des = sqrt_controller(yaw_err, _p_angle_yaw.kP(),   10.0f, _dt);
+
+    // 如果低速飞行，则应用增益调度；如果高速飞行，则完全按照固定翼方式控制
+    // pitch_real 真实俯仰角，平飞为0，垂起为pi/2，倒飞为pi，范围±pi；在±pi衔接处，stheta和ctheta不会发生突变
+    float stheta = sinf(pitch_real);    // 真实俯仰角正弦，平飞为0，垂起为1，倒飞为0
+    float ctheta = cosf(pitch_real);    // 真实俯仰角余弦，平飞为1，垂起为0，倒飞为-1
+    _ang_vel_body.x = gsgain * rll_rate_des + (1-gsgain) * (ctheta*rll_rate_des - stheta*yaw_rate_des);
+    _ang_vel_body.y = pth_rate_des;
+    _ang_vel_body.z = gsgain * yaw_rate_des + (1-gsgain) * (ctheta*yaw_rate_des + stheta*rll_rate_des);
+    _ang_vel_body.x = constrain_float(_ang_vel_body.x, -6.28f, 6.28f);
+    _ang_vel_body.y = constrain_float(_ang_vel_body.y, -6.28f, 6.28f);
+    _ang_vel_body.z = constrain_float(_ang_vel_body.z, -6.28f, 6.28f);
+
+    // 用于全地形起降，即大俯仰误差时，保持动力方向竖直朝上
+    float pitch_error = constrain_float(0.7f*pth_err, -1.0f, 1.0f); // 缩放，原比例为0.6
+    float extra_sign = pitch_error > 0?1:-1;
+    falcon_extra_elevator = extra_sign * powf(fabsf(pitch_error), 3.0); // 指数不能小于2，过小会导致小误差大反馈，原指数为2.5
 }
 
 // Command an euler roll, pitch and yaw angle with angular velocity feedforward and smoothing

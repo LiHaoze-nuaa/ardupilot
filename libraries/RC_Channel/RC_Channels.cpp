@@ -33,6 +33,10 @@ extern const AP_HAL::HAL& hal;
 
 #include "RC_Channel.h"
 
+uint32_t now_ms;
+uint32_t last_ms;
+uint32_t dt_ms;
+uint16_t chan6 = 1150; // 传递变量
 /*
   channels group object constructor
  */
@@ -62,10 +66,31 @@ uint8_t RC_Channels::get_radio_in(uint16_t *chans, const uint8_t num_channels)
     memset(chans, 0, num_channels*sizeof(*chans));
 
     const uint8_t read_channels = MIN(num_channels, NUM_RC_CHANNELS);
-    for (uint8_t i = 0; i < read_channels; i++) {
-        chans[i] = channel(i)->get_radio_in();
+    now_ms = AP_HAL::millis();
+    dt_ms = dt_ms + now_ms - last_ms;
+
+    for (uint8_t i = 0; i < read_channels; i++) 
+    {
+        if (i==6) // chans[6]其实是第7通道，chans[7]其实是第8通道
+        {   
+            if( chans[5] <= 1200 ) // 拨杆朝下则递减
+            // 变姿速度从这里修改，建议设置为8秒完成变姿，过程比较柔和
+            // 暂时设置为2秒，保证在测试时能够紧急救机
+            {   if (dt_ms>2)  { chan6 = chan6 - 1; chans[6] = chan6; dt_ms = 0; }
+                else  { chan6 = chan6; chans[6] = chan6; } }
+            if( chans[5] > 1200 && chans[5] < 1800 ) // 拨杆中位则保持
+            {   chan6 = chan6;  chans[6] = chan6; }
+            if( chans[5] >= 1800 ) // 拨杆朝上则递增
+            {   if (dt_ms>2)  { chan6 = chan6 + 1; chans[6] = chan6; dt_ms = 0; }
+                else  { chan6 = chan6;  chans[6] = chan6; } }
+            if( chan6 >= 1900 ) { chan6 = 1900;  chans[6] = chan6; } // 最大限幅
+            if( chan6 <= 1150 ) { chan6 = 1150;  chans[6] = chan6; } // 最小限幅
+        }
+        else
+        {   chans[i] = channel(i)->get_radio_in();   }  
     }
 
+    last_ms = AP_HAL::millis();
     return read_channels;
 }
 

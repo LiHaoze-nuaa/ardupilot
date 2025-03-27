@@ -453,7 +453,7 @@ void Tailsitter::output(void)
         float extra_sign = extra_pitch > 0?1:-1;
         float extra_elevator = 0;
         if (!is_zero(extra_pitch) && quadplane.in_vtol_mode()) {
-            extra_elevator = extra_sign * powf(fabsf(extra_pitch), vectored_hover_power) * SERVO_MAX;
+            extra_elevator = extra_sign * powf(fabsf(extra_pitch), vectored_hover_power) * SERVO_MAX; // 全地形起降关键程序
         }
         tilt_left  = extra_elevator + tilt_left * vectored_hover_gain;
         tilt_right = extra_elevator + tilt_right * vectored_hover_gain;
