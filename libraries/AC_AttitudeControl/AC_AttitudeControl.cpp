@@ -2,8 +2,11 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 #include <AP_Scheduler/AP_Scheduler.h>
+#include <GCS_MAVLink/GCS.h>
 
 extern const AP_HAL::HAL& hal;
+float vct_mpc, thr_mpc;
+uint8_t cmd_count;
 
 #if APM_BUILD_TYPE(APM_BUILD_ArduPlane)
  // default gains for Plane
@@ -314,6 +317,59 @@ void AC_AttitudeControl::input_euler_angle_roll_pitch_euler_rate_yaw(float euler
 
     // Call quaternion attitude controller
     attitude_controller_run_quat();
+}
+
+void AC_AttitudeControl::pend_attitude_controller_run(float roll_cmd, float pitch_cmd, float yaw_cmd, float thr_cmd)
+{
+    uint16_t rcin[8] = {};
+    rc().get_radio_in (rcin, 8); // 获取遥控器数据
+    const float roll_des  = radians( (rcin[0]-1500)*0.1f ); // 期望滚转角，±90deg
+    #ifdef VECTOR_MODE // 矢量模式
+    const float pitch_des = radians( (rcin[1]-1500)*0.1f ); // 期望俯仰角，±90deg
+    #else // 力矩摆模式
+    const float pitch_des = 0.0f; // 力矩摆矢量模式的期望俯仰角为0
+    #endif
+    const float yaw_des   = radians( (rcin[3]-1500)*0.1f ); // 期望偏航角，±20deg
+    const float pitch_ntrl= radians( (rcin[6]-1500)*0.1f ); // 中立俯仰角，0deg
+    const AP_AHRS &ahrs_pend = AP::ahrs(); // 获取姿态数据  
+    float roll_pend = ahrs_pend.get_roll();
+    float pitch_pend= ahrs_pend.get_pitch();
+    float yaw_pend  = ahrs_pend.get_yaw();
+    float rll_err = roll_des - roll_pend; 
+    float pth_err = pitch_des - pitch_pend + pitch_ntrl*0.0f;   
+    float yaw_err = yaw_des - yaw_pend*0.0f;
+
+    #ifdef VECTOR_MODE // 矢量模式
+    if ( rcin[4] < 1200 ) { // 自稳模式
+        _ang_vel_body.x = sqrt_controller(rll_err, _p_angle_roll.kP(),  50.0f, _dt); // 计算期望角速度
+        _ang_vel_body.y = sqrt_controller(pth_err, _p_angle_pitch.kP(), 50.0f, _dt);
+        _ang_vel_body.z = sqrt_controller(yaw_err, _p_angle_yaw.kP(),   10.0f, _dt); }
+    else if ( rcin[4] >= 1200 ) { // MPC模式
+        if(cmd_count >= 50) { cmd_count = 0; // 检查串口状态及输出指令
+        gcs().send_text(MAV_SEVERITY_INFO, "r=%f p=%f y=%f t=%f", roll_cmd, pitch_cmd, yaw_cmd, thr_cmd); }
+        cmd_count ++;
+        _ang_vel_body.x = roll_cmd * M_PI;
+        _ang_vel_body.y = pitch_cmd * M_PI;
+        _ang_vel_body.z = yaw_cmd * M_PI;
+        thr_mpc = thr_cmd; }
+    #else // 力矩摆模式
+        _ang_vel_body.y = sqrt_controller(pth_err, _p_angle_pitch.kP(), 50.0f, _dt);
+    if ( rcin[4] < 1200 ) { // 自稳模式
+        _ang_vel_body.x = sqrt_controller(rll_err, _p_angle_roll.kP(),  50.0f, _dt);
+        _ang_vel_body.z = sqrt_controller(yaw_err, _p_angle_yaw.kP(),   10.0f, _dt); }
+    else if ( rcin[4] >= 1200 ) { // MPC模式
+        if(cmd_count >= 50) { cmd_count = 0; // 检查串口状态及输出指令
+        gcs().send_text(MAV_SEVERITY_INFO, "r=%f p=%f y=%f t=%f", roll_cmd, pitch_cmd, yaw_cmd, thr_cmd); }
+        cmd_count ++;
+        _ang_vel_body.x = roll_cmd * M_PI;
+        _ang_vel_body.z = yaw_cmd * M_PI; 
+        vct_mpc = pitch_cmd;
+        thr_mpc = thr_cmd; }
+    #endif
+
+    _ang_vel_body.x = constrain_float(_ang_vel_body.x, -6.28f, 6.28f);
+    _ang_vel_body.y = constrain_float(_ang_vel_body.y, -6.28f, 6.28f);
+    _ang_vel_body.z = constrain_float(_ang_vel_body.z, -6.28f, 6.28f);
 }
 
 // Command an euler roll, pitch and yaw angle with angular velocity feedforward and smoothing

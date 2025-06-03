@@ -5,6 +5,8 @@
 #include <AP_Common/AP_Common.h>
 #include <AP_Math/AP_Math.h>
 #include "AP_MotorsMulticopter.h"
+#include <AP_CANManager/AP_FOCCAN.h>
+#include <AP_AHRS/AP_AHRS.h>
 
 /// @class      AP_MotorsTailsitter
 class AP_MotorsTailsitter : public AP_MotorsMulticopter {
@@ -41,12 +43,16 @@ protected:
     // spin a motor at the pwm value specified
     void _output_test_seq(uint8_t motor_seq, int16_t pwm) override;
 
+    AP_FOCCAN* FOCCAN;
+    int16_t pend_current;
+
     // calculated outputs
     float _throttle; // 0..1
     float _tilt_left;  // -1..1
     float _tilt_right;  // -1..1
     float _thrust_left;  // 0..1
     float _thrust_right;  // 0..1
+    float _roll_filt, _pitch_filt, _yaw_filt;
 
     // Set by tailsitters using diskloading minumum outflow velocity limit
     float _external_min_throttle;

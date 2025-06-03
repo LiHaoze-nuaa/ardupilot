@@ -1,31 +1,14 @@
-/*
-   This program is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
-   (at your option) any later version.
-
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-/*
- *       AP_MotorsTailsitter.cpp - ArduCopter motors library for tailsitters and bicopters
- *
- */
+// AP_MotorsTailsitter.cpp - ArduCopter motors library for tailsitters and bicopters
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Math/AP_Math.h>
 #include "AP_MotorsTailsitter.h"
 #include <GCS_MAVLink/GCS.h>
 #include <SRV_Channel/SRV_Channel.h>
+#include <RC_Channel/RC_Channel.h>
+#include <AC_AttitudeControl/AC_AttitudeControl.h>
 
 extern const AP_HAL::HAL& hal;
-
 #define SERVO_OUTPUT_RANGE  4500
 
 // init
@@ -52,6 +35,7 @@ void AP_MotorsTailsitter::init(motor_frame_class frame_class, motor_frame_type f
 
     // record successful initialisation if what we setup was the desired frame_class
     set_initialised_ok(frame_class == MOTOR_FRAME_TAILSITTER);
+    FOCCAN = AP_FOCCAN::get_singleton(); // 很关键
 }
 
 
@@ -138,80 +122,67 @@ void AP_MotorsTailsitter::output_armed_stabilizing()
     float   pitch_thrust;               // pitch thrust input value, +/- 1.0
     float   yaw_thrust;                 // yaw thrust input value, +/- 1.0
     float   throttle_thrust;            // throttle thrust input value, 0.0 - 1.0
-    float   thrust_max;                 // highest motor value
-    float   thrust_min;                 // lowest motor value
-    float   thr_adj = 0.0f;             // the difference between the pilot's desired throttle and throttle_thrust_best_rpy
 
     // apply voltage and air pressure compensation
-    const float compensation_gain = thr_lin.get_compensation_gain();
-    roll_thrust = (_roll_in + _roll_in_ff) * compensation_gain;
-    pitch_thrust = _pitch_in + _pitch_in_ff;
-    yaw_thrust = _yaw_in + _yaw_in_ff;
-    throttle_thrust = get_throttle() * compensation_gain;
-    const float max_boost_throttle = _throttle_avg_max * compensation_gain;
+    uint16_t rcin[8] = {};
+    rc().get_radio_in (rcin, 8); // 获取遥控器数据
+    roll_thrust = _roll_in;
+    pitch_thrust = _pitch_in;
+    yaw_thrust = _yaw_in;
+    
+    #ifdef VECTOR_MODE // 矢量模式
+    if ( rcin[4] < 1200) { // 自稳模式
+        throttle_thrust = (rcin[2] - 1100) * 0.001f; }
+    else if ( rcin[4] >= 1200) { // MPC模式
+        throttle_thrust = thr_mpc; }
+    #else // 力矩摆模式
+    float forward_vector;    
+    if ( rcin[4] < 1200) { // 自稳模式
+        forward_vector = (rcin[1] - 1500) * 0.001f;
+        throttle_thrust = (rcin[2] - 1100) * 0.001f; }
+    else if ( rcin[4] >= 1200) { // MPC模式
+        forward_vector = vct_mpc;
+        throttle_thrust = thr_mpc; }
+    pend_current = (int16_t)(-pitch_thrust*600); // 力矩摆电流信号处理
+    if ( pend_current >  1 ) { pend_current += 25; } // 无响应死区截断
+    if ( pend_current < -1 ) { pend_current -= 25; }
+    // const AP_AHRS &ahrs_pend = AP::ahrs();
+    // const float pth = ahrs_pend.get_pitch();
+    if ( rcin[2] < 1200 ) { pend_current = 0; }
+    #endif
 
-    // never boost above max, derived from throttle mix params
-    const float min_throttle_out = MIN(_external_min_throttle, max_boost_throttle);
-    const float max_throttle_out = _throttle_thrust_max * compensation_gain;
+    if (throttle_thrust <= 0.0f) 
+    { throttle_thrust = 0.0f; limit.throttle_lower = true; }
+    if (throttle_thrust >= 1.0f) 
+    { throttle_thrust = 1.0f; limit.throttle_upper = true; }    
+        
+    // 低通滤波
+    _roll_filt  = 0.5f * _roll_filt  + 0.5f * roll_thrust;
+    _pitch_filt = 0.5f * _pitch_filt + 0.5f * pitch_thrust;
+    _yaw_filt   = 0.5f * _yaw_filt   + 0.5f * yaw_thrust;
+    roll_thrust  = _roll_filt;
+    pitch_thrust = _pitch_filt;
+    yaw_thrust   = _yaw_filt;
 
-    // sanity check throttle is above min and below current limited throttle
-    if (throttle_thrust <= min_throttle_out) {
-        throttle_thrust = min_throttle_out;
-        limit.throttle_lower = true;
-    }
-    if (throttle_thrust >= max_throttle_out) {
-        throttle_thrust = max_throttle_out;
-        limit.throttle_upper = true;
-    }
-
-    if (roll_thrust >= 1.0) {
-        // cannot split motor outputs by more than 1
-        roll_thrust = 1;
-        limit.roll = true;
-    }
-
-    // calculate left and right throttle outputs
+    #ifdef VECTOR_MODE // 矢量模式控制分配
     _thrust_left  = throttle_thrust + roll_thrust * 0.5f;
     _thrust_right = throttle_thrust - roll_thrust * 0.5f;
-
-    thrust_max = MAX(_thrust_right,_thrust_left);
-    thrust_min = MIN(_thrust_right,_thrust_left);
-    if (thrust_max > 1.0f) {
-        // if max thrust is more than one reduce average throttle
-        thr_adj = 1.0f - thrust_max;
-        limit.throttle_upper = true;
-    } else if (thrust_min < 0.0) {
-        // if min thrust is less than 0 increase average throttle
-        // but never above max boost
-        thr_adj = -thrust_min;
-        if ((throttle_thrust + thr_adj) > max_boost_throttle) {
-            thr_adj = MAX(max_boost_throttle - throttle_thrust, 0.0);
-            // in this case we throw away some roll output, it will be uneven
-            // constraining the lower motor more than the upper
-            // this unbalances torque, but motor torque should have significantly less control power than tilts / control surfaces
-            // so its worth keeping the higher roll control power at a minor cost to yaw
-            limit.roll = true;
-        }
-        limit.throttle_lower = true;
-    }
-
-    // Add adjustment to reduce average throttle
-    _thrust_left  = constrain_float(_thrust_left  + thr_adj, 0.0f, 1.0f);
-    _thrust_right = constrain_float(_thrust_right + thr_adj, 0.0f, 1.0f);
-
-    _throttle = throttle_thrust;
-
-    // compensation_gain can never be zero
-    // ensure accurate representation of average throttle output, this value is used for notch tracking and control surface scaling
-    if (_has_diff_thrust) {
-        _throttle_out = (throttle_thrust + thr_adj) / compensation_gain;
-    } else {
-        _throttle_out = throttle_thrust / compensation_gain;
-    }
-
-    // thrust vectoring
     _tilt_left  = pitch_thrust - yaw_thrust;
     _tilt_right = pitch_thrust + yaw_thrust;
+    #else // 力矩摆模式控制分配
+    _thrust_left  = throttle_thrust + roll_thrust * 0.5f;
+    _thrust_right = throttle_thrust - roll_thrust * 0.5f;
+    _tilt_left  = forward_vector - yaw_thrust;
+    _tilt_right = forward_vector + yaw_thrust;
+    FOCCAN->setCurrent(pend_current);
+    #endif
+
+    _thrust_left  = constrain_float(_thrust_left , 0.0f, 1.0f);
+    _thrust_right = constrain_float(_thrust_right, 0.0f, 1.0f);
+    _tilt_left  = constrain_float(_tilt_left , -1.0f, 1.0f);
+    _tilt_right = constrain_float(_tilt_right, -1.0f, 1.0f);
+    _throttle = throttle_thrust; 
+    _throttle_out = throttle_thrust;
 }
 
 // output_test_seq - spin a motor at the pwm value specified

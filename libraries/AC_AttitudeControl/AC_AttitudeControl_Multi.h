@@ -77,6 +77,7 @@ public:
 
     // run lowest level body-frame rate controller and send outputs to the motors
     void rate_controller_run() override;
+    void pend_rate_controller_run() override;
 
     // sanity check parameters.  should be called once before take-off
     void parameter_sanity_check() override;

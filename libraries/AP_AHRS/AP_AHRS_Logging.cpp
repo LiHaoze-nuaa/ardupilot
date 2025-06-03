@@ -7,7 +7,7 @@
 
 #include <AC_AttitudeControl/AC_AttitudeControl.h>
 #include <AC_AttitudeControl/AC_PosControl.h>
-
+#include <AP_CANManager/AP_FOCCAN.h>
 
 // Write an AHRS2 packet
 void AP_AHRS::Write_AHRS2() const
@@ -148,6 +148,7 @@ void AP_AHRS_View::Write_Rate(const AP_Motors &motors, const AC_AttitudeControl 
                                 const AC_PosControl &pos_control) const
 {
     const Vector3f &rate_targets = attitude_control.rate_bf_targets();
+    AP_FOCCAN *FOCCAN = AP_FOCCAN::get_singleton();
     const Vector3f &accel_target = pos_control.get_accel_target_cmss();
     const auto timeus = AP_HAL::micros64();
     const struct log_Rate pkt_rate{
@@ -155,7 +156,7 @@ void AP_AHRS_View::Write_Rate(const AP_Motors &motors, const AC_AttitudeControl 
         time_us         : timeus,
         control_roll    : degrees(rate_targets.x),
         roll            : degrees(get_gyro().x),
-        roll_out        : motors.get_roll()+motors.get_roll_ff(),
+        roll_out        : FOCCAN->getPendAngle(), // 记录摆角
         control_pitch   : degrees(rate_targets.y),
         pitch           : degrees(get_gyro().y),
         pitch_out       : motors.get_pitch()+motors.get_pitch_ff(),

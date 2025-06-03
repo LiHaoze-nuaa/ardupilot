@@ -1030,7 +1030,7 @@ public:
     // climb_rate_cms_or_thrust: represents either the climb_rate (cm/s) or thrust scaled from [0, 1], unitless
     // use_thrust: IF true: climb_rate_cms_or_thrust represents thrust
     //             IF false: climb_rate_cms_or_thrust represents climb_rate (cm/s)
-    void set_angle(const Quaternion &attitude_quat, const Vector3f &ang_vel, float climb_rate_cms_or_thrust, bool use_thrust);
+    void set_angle(const Quaternion &attitude_quat, const Vector3f &ang_vel, float climb_rate_cms_or_thrust, bool use_thrust); //
 
     bool set_destination(const Vector3f& destination, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false, bool terrain_alt = false);
     bool set_destination(const Location& dest_loc, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false);
@@ -1538,7 +1538,7 @@ private:
 };
 
 
-class ModeStabilize : public Mode {
+class ModeStabilize : public Mode { //
 
 public:
     // inherit constructor
@@ -1554,6 +1554,7 @@ public:
     bool allows_save_trim() const override { return true; }
     bool allows_autotune() const override { return true; }
     bool allows_flip() const override { return true; }
+    void set_rate(const Vector3f &rate_cmd, float thrust_cmd);
 
 protected:
 

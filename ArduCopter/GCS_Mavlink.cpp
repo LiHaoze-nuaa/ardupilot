@@ -4,6 +4,8 @@
 #include <AP_RPM/AP_RPM_config.h>
 #include <AP_EFI/AP_EFI_config.h>
 
+// uint16_t count_cmd = 0;
+
 MAV_TYPE GCS_Copter::frame_type() const
 {
     /*
@@ -1197,83 +1199,22 @@ void GCS_MAVLINK_Copter::handle_message(const mavlink_message_t &msg)
 #endif
 
     switch (msg.msgid) {
-
-#if MODE_GUIDED_ENABLED == ENABLED
-    case MAVLINK_MSG_ID_SET_ATTITUDE_TARGET:   // MAV ID: 82
-    {
-        // decode packet
-        mavlink_set_attitude_target_t packet;
+    
+    case MAVLINK_MSG_ID_SET_ATTITUDE_TARGET: // MAV ID: 82
+    {   mavlink_set_attitude_target_t packet;
         mavlink_msg_set_attitude_target_decode(&msg, &packet);
-
-        // exit if vehicle is not in Guided mode or Auto-Guided mode
-        if (!copter.flightmode->in_guided_mode()) {
-            break;
-        }
-
-        const bool roll_rate_ignore   = packet.type_mask & ATTITUDE_TARGET_TYPEMASK_BODY_ROLL_RATE_IGNORE;
-        const bool pitch_rate_ignore  = packet.type_mask & ATTITUDE_TARGET_TYPEMASK_BODY_PITCH_RATE_IGNORE;
-        const bool yaw_rate_ignore    = packet.type_mask & ATTITUDE_TARGET_TYPEMASK_BODY_YAW_RATE_IGNORE;
-        const bool throttle_ignore    = packet.type_mask & ATTITUDE_TARGET_TYPEMASK_THROTTLE_IGNORE;
-        const bool attitude_ignore    = packet.type_mask & ATTITUDE_TARGET_TYPEMASK_ATTITUDE_IGNORE;
-
-        // ensure thrust field is not ignored
-        if (throttle_ignore) {
-            break;
-        }
-
-        Quaternion attitude_quat;
-        if (attitude_ignore) {
-            attitude_quat.zero();
-        } else {
-            attitude_quat = Quaternion(packet.q[0],packet.q[1],packet.q[2],packet.q[3]);
-
-            // Do not accept the attitude_quaternion
-            // if its magnitude is not close to unit length +/- 1E-3
-            // this limit is somewhat greater than sqrt(FLT_EPSL)
-            if (!attitude_quat.is_unit_length()) {
-                // The attitude quaternion is ill-defined
-                break;
-            }
-        }
-
-        // check if the message's thrust field should be interpreted as a climb rate or as thrust
-        const bool use_thrust = copter.mode_guided.set_attitude_target_provides_thrust();
-
-        float climb_rate_or_thrust;
-        if (use_thrust) {
-            // interpret thrust as thrust
-            climb_rate_or_thrust = constrain_float(packet.thrust, -1.0f, 1.0f);
-        } else {
-            // convert thrust to climb rate
-            packet.thrust = constrain_float(packet.thrust, 0.0f, 1.0f);
-            if (is_equal(packet.thrust, 0.5f)) {
-                climb_rate_or_thrust = 0.0f;
-            } else if (packet.thrust > 0.5f) {
-                // climb at up to WPNAV_SPEED_UP
-                climb_rate_or_thrust = (packet.thrust - 0.5f) * 2.0f * copter.wp_nav->get_default_speed_up();
-            } else {
-                // descend at up to WPNAV_SPEED_DN
-                climb_rate_or_thrust = (0.5f - packet.thrust) * 2.0f * -copter.wp_nav->get_default_speed_down();
-            }
-        }
-
-        Vector3f ang_vel;
-        if (!roll_rate_ignore) {
-            ang_vel.x = packet.body_roll_rate;
-        }
-        if (!pitch_rate_ignore) {
-            ang_vel.y = packet.body_pitch_rate;
-        }
-        if (!yaw_rate_ignore) {
-            ang_vel.z = packet.body_yaw_rate;
-        }
-
-        copter.mode_guided.set_angle(attitude_quat, ang_vel,
-                climb_rate_or_thrust, use_thrust);
-
+        float thrust_cmd = constrain_float(packet.thrust, 0.0f, 1.0f);
+        Vector3f rate_cmd;
+        rate_cmd.x = packet.body_roll_rate;
+        rate_cmd.y = packet.body_pitch_rate;
+        rate_cmd.z = packet.body_yaw_rate;
+        copter.mode_stabilize.set_rate(rate_cmd, thrust_cmd);
+        // count_cmd++; // 经测试，此处接收到ID82消息的频率为100Hz，且频率稳定
+        // gcs().send_text(MAV_SEVERITY_INFO, "count_cmd=%d", count_cmd);
         break;
     }
 
+#if MODE_GUIDED_ENABLED == ENABLED
     case MAVLINK_MSG_ID_SET_POSITION_TARGET_LOCAL_NED:     // MAV ID: 84
     {
         // decode packet
