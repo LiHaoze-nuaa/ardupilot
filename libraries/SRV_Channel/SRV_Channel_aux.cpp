@@ -120,6 +120,7 @@ void SRV_Channel::aux_servo_function_setup(void)
     case k_flaperon_right:
     case k_tiltMotorLeft:
     case k_tiltMotorRight:
+    case k_tailServo:
     case k_elevon_left:
     case k_elevon_right:
     case k_vtail_left:
@@ -129,6 +130,8 @@ void SRV_Channel::aux_servo_function_setup(void)
     case k_throttle:
     case k_throttleLeft:
     case k_throttleRight:
+    case k_throttleFront:
+    case k_throttleBack:
         // fixed wing throttle
         set_range(100);
         break;
